@@ -231,29 +231,47 @@ async function authorizeYouTube(rl) {
 
 	try {
 		const tokenRaw = await fs.readFile(TOKEN_PATH, 'utf-8');
-		oauth2Client.setCredentials(JSON.parse(tokenRaw));
-		return oauth2Client;
+		const storedTokens = JSON.parse(tokenRaw);
+
+		// refresh_token が無いトークンは失効時に更新できないため再認証する
+		if (storedTokens?.refresh_token) {
+			oauth2Client.setCredentials(storedTokens);
+			return oauth2Client;
+		}
+
+		console.warn(
+			'保存済みトークンに refresh_token が無いため、再認証を実行します。',
+		);
 	} catch {
-		const authUrl = oauth2Client.generateAuthUrl({
-			access_type: 'offline',
-			scope: [YOUTUBE_SCOPE],
-		});
-		console.log('Authorize this app by visiting this url:');
-		console.log(authUrl);
-
-		const code = (
-			await rl.question('Enter the code from that page here: ')
-		).trim();
-		const tokenResponse = await oauth2Client.getToken(code);
-		const tokens = tokenResponse.tokens;
-
-		oauth2Client.setCredentials(tokens);
-		await fs.mkdir(TOKEN_DIR, { recursive: true });
-		await fs.writeFile(TOKEN_PATH, JSON.stringify(tokens), 'utf-8');
-		console.log(`Token stored to ${TOKEN_PATH}`);
-
-		return oauth2Client;
+		// トークン未作成時は下の再認証フローへ
 	}
+
+	const authUrl = oauth2Client.generateAuthUrl({
+		access_type: 'offline',
+		prompt: 'consent',
+		scope: [YOUTUBE_SCOPE],
+	});
+	console.log('Authorize this app by visiting this url:');
+	console.log(authUrl);
+
+	const code = (
+		await rl.question('Enter the code from that page here: ')
+	).trim();
+	const tokenResponse = await oauth2Client.getToken(code);
+	const tokens = tokenResponse.tokens;
+
+	if (!tokens?.refresh_token) {
+		throw new Error(
+			'refresh_token を取得できませんでした。Googleアカウントの許可を解除後に再実行してください。',
+		);
+	}
+
+	oauth2Client.setCredentials(tokens);
+	await fs.mkdir(TOKEN_DIR, { recursive: true });
+	await fs.writeFile(TOKEN_PATH, JSON.stringify(tokens), 'utf-8');
+	console.log(`Token stored to ${TOKEN_PATH}`);
+
+	return oauth2Client;
 }
 
 async function addVideosToPlaylist(authClient, playlistId, videoIds) {
