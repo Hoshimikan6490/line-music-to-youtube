@@ -1,0 +1,7 @@
+// ignore node_modules
+node_modules
+
+// ignore credential data
+.env
+credentials.json
+/.credentials/*.json
