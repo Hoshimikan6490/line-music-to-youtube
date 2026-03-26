@@ -299,54 +299,53 @@ async function addVideosToPlaylist(authClient, playlistId, videoIds) {
 async function main() {
 	const rl = readline.createInterface({ input, output });
 
-	try {
-		const tracks = await loadTracks();
-		const yt = await Innertube.create();
+	const tracks = await loadTracks();
+	const yt = await Innertube.create();
 
-		console.log(`loaded tracks: ${tracks.length}`);
-		const selectedVideoIds = await searchAndAskSelections(yt, rl, tracks);
-		console.log(`\n選択された動画数: ${selectedVideoIds.length}`);
-		if (selectedVideoIds.length === 0) {
-			console.log('追加対象がないため終了します。');
-			return;
-		}
-
-		const playlistUrl =
-			process.env.YouTubePlaylistURL || process.env.YOUTUBE_PLAYLIST_URL;
-		const playlistId = getPlaylistIdFromUrl(playlistUrl);
-
-		let confirm;
-		while (true) {
-			confirm = (
-				await rl.question(
-					`プレイリスト(${playlistId})へ ${selectedVideoIds.length} 件追加します。実行しますか？ (y/N): `,
-				)
-			)
-				.trim()
-				.toLowerCase();
-
-			if (confirm === 'y' || confirm === 'n' || confirm === '') {
-				break;
-			}
-
-			console.log('y か n を入力してください。');
-		}
-
-		if (confirm !== 'y') {
-			console.log('キャンセルしました。');
-			return;
-		}
-
-		const authClient = await authorizeYouTube(rl);
-		await addVideosToPlaylist(authClient, playlistId, selectedVideoIds);
-
-		console.log('完了しました。');
-	} finally {
-		rl.close();
+	console.log(`loaded tracks: ${tracks.length}`);
+	const selectedVideoIds = await searchAndAskSelections(yt, rl, tracks);
+	console.log(`\n選択された動画数: ${selectedVideoIds.length}`);
+	if (selectedVideoIds.length === 0) {
+		console.log('追加対象がないため終了します。');
+		return;
 	}
+
+	const playlistUrl =
+		process.env.YouTubePlaylistURL || process.env.YOUTUBE_PLAYLIST_URL;
+	const playlistId = getPlaylistIdFromUrl(playlistUrl);
+
+	let confirm;
+	while (true) {
+		confirm = (
+			await rl.question(
+				`プレイリスト(${playlistId})へ ${selectedVideoIds.length} 件追加します。実行しますか？ (y/N): `,
+			)
+		)
+			.trim()
+			.toLowerCase();
+
+		if (confirm === 'y' || confirm === 'n' || confirm === '') {
+			break;
+		}
+
+		console.log('y か n を入力してください。');
+	}
+
+	if (confirm !== 'y') {
+		console.log('キャンセルしました。');
+		return;
+	}
+
+	const authClient = await authorizeYouTube(rl);
+	await addVideosToPlaylist(authClient, playlistId, selectedVideoIds);
+
+	console.log('完了しました。');
+	rl.close();
+	process.exit(0);
 }
 
 main().catch((err) => {
-	console.error(`Error: ${err.message}`);
+	console.error('Error:');
+	console.error(err);
 	process.exit(1);
 });
