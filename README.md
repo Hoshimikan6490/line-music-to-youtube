@@ -106,3 +106,7 @@ npm run create-playlist
 ## 補足
 
 - このツールは手動選択前提のため、同一曲でも別バージョンが候補に出ることがあります。
+
+## 参考サイト
+- Google OAuth2の認証ガイド的なもの：　https://zenn.dev/daddy_yukio/articles/9d5662d294eb33
+- YouTube Data APIのNode.jsクイックガイド：　https://developers.google.com/youtube/v3/quickstart/nodejs
