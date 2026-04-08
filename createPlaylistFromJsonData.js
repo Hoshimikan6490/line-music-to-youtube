@@ -163,7 +163,7 @@ async function loadTracks() {
 	return parsed;
 }
 
-async function searchAndAskSelections(yt, rl, tracks) {
+async function searchAndAskSelections(yt, tracks) {
 	const selectedItems = [];
 
 	for (let i = 0; i < tracks.length; i += 1) {
@@ -187,35 +187,15 @@ async function searchAndAskSelections(yt, rl, tracks) {
 			continue;
 		}
 
-		candidates.forEach((candidate, idx) => {
-			console.log(`  ${idx + 1}. ${candidate.title} - ${candidate.channel}`);
-			console.log(`     ${candidate.url}`);
-		});
-
-		const answer = await rl.question(
-			'追加する番号を入力 (1-5) / s=skip / q=quit: ',
+		const selectedCandidate = candidates[0];
+		console.log(
+			`自動選択: 1. ${selectedCandidate.title} - ${selectedCandidate.channel}`,
 		);
-		const normalized = answer.trim().toLowerCase();
-
-		if (normalized === 'q') {
-			throw new Error('ユーザーが中断しました。');
-		}
-
-		if (normalized === 's' || normalized === '') {
-			await sleep(SEARCH_DELAY_MS);
-			continue;
-		}
-
-		const selectedIndex = Number.parseInt(normalized, 10) - 1;
-		if (Number.isNaN(selectedIndex) || !candidates[selectedIndex]) {
-			console.log('無効な入力なのでスキップします。');
-			await sleep(SEARCH_DELAY_MS);
-			continue;
-		}
+		console.log(`     ${selectedCandidate.url}`);
 
 		selectedItems.push({
 			track,
-			videoId: candidates[selectedIndex].id,
+			videoId: selectedCandidate.id,
 		});
 		await sleep(SEARCH_DELAY_MS);
 	}
@@ -366,7 +346,7 @@ async function main() {
 		const yt = await Innertube.create();
 
 		console.log(`loaded tracks: ${tracks.length}`);
-		const selectedItems = await searchAndAskSelections(yt, rl, tracks);
+		const selectedItems = await searchAndAskSelections(yt, tracks);
 		console.log(`\n選択された動画数: ${selectedItems.length}`);
 		if (selectedItems.length === 0) {
 			console.log('追加対象がないため終了します。');
