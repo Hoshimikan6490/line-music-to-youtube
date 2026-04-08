@@ -8,6 +8,7 @@ const { google } = require('googleapis');
 const express = require('express');
 
 const TRACE_FILE = path.join(__dirname, 'tracks', 'tracedData.json');
+const REMAINING_TRACE_FILE = path.join(__dirname, 'remainingTracedData.json');
 const CREDENTIALS_FILE = path.join(__dirname, 'credentials.json');
 const TOKEN_DIR = path.join(__dirname, '.credentials');
 const TOKEN_PATH = path.join(TOKEN_DIR, 'youtube-playlist-token.json');
@@ -16,9 +17,43 @@ const YOUTUBE_SCOPE = 'https://www.googleapis.com/auth/youtube';
 
 const CANDIDATE_COUNT = 5;
 const SEARCH_DELAY_MS = 250;
+const DEFAULT_INSERT_DELAY_MS = 120;
+const LARGE_PLAYLIST_INSERT_DELAY_MS = 1000;
 
 function sleep(ms) {
 	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRateLimitError(error) {
+	const reasons =
+		error?.response?.data?.error?.errors
+			?.map((item) => String(item?.reason || '').toLowerCase())
+			.filter(Boolean) || [];
+	const message = String(error?.message || '').toLowerCase();
+	const status = error?.response?.status;
+
+	return (
+		status === 429 ||
+		(status === 403 &&
+			reasons.some((reason) =>
+				[
+					'ratelimitexceeded',
+					'quotaexceeded',
+					'dailylimitexceeded',
+					'userratelimitexceeded',
+				].includes(reason),
+			)) ||
+		/ratelimit|quota/.test(message)
+	);
+}
+
+async function saveRemainingTracks(tracks) {
+	await fs.writeFile(
+		REMAINING_TRACE_FILE,
+		JSON.stringify(tracks, null, '\t'),
+		'utf-8',
+	);
+	console.warn(`未処理の曲情報を ${REMAINING_TRACE_FILE} に保存しました。`);
 }
 
 // 認証コードを分かりやすく表示する
@@ -129,7 +164,7 @@ async function loadTracks() {
 }
 
 async function searchAndAskSelections(yt, rl, tracks) {
-	const selectedVideoIds = [];
+	const selectedItems = [];
 
 	for (let i = 0; i < tracks.length; i += 1) {
 		const track = tracks[i];
@@ -178,11 +213,14 @@ async function searchAndAskSelections(yt, rl, tracks) {
 			continue;
 		}
 
-		selectedVideoIds.push(candidates[selectedIndex].id);
+		selectedItems.push({
+			track,
+			videoId: candidates[selectedIndex].id,
+		});
 		await sleep(SEARCH_DELAY_MS);
 	}
 
-	return selectedVideoIds;
+	return selectedItems;
 }
 
 async function authorizeYouTube(rl) {
@@ -274,78 +312,108 @@ async function authorizeYouTube(rl) {
 	return oauth2Client;
 }
 
-async function addVideosToPlaylist(authClient, playlistId, videoIds) {
+async function addVideosToPlaylist(authClient, playlistId, selectedItems) {
 	const youtube = google.youtube({ version: 'v3', auth: authClient });
+	const insertDelayMs =
+		selectedItems.length > 100
+			? LARGE_PLAYLIST_INSERT_DELAY_MS
+			: DEFAULT_INSERT_DELAY_MS;
 
-	for (let i = 0; i < videoIds.length; i += 1) {
-		const videoId = videoIds[i];
-		console.log(`[${i + 1}/${videoIds.length}] add ${videoId}`);
-		await youtube.playlistItems.insert({
-			part: ['snippet'],
-			requestBody: {
-				snippet: {
-					playlistId,
-					resourceId: {
-						kind: 'youtube#video',
-						videoId,
+	if (selectedItems.length > 100) {
+		console.log(
+			`登録件数が ${selectedItems.length} 件あるため、各曲の登録後に ${insertDelayMs}ms 待機します。`,
+		);
+	}
+
+	for (let i = 0; i < selectedItems.length; i += 1) {
+		const { track, videoId } = selectedItems[i];
+		console.log(`[${i + 1}/${selectedItems.length}] add ${videoId}`);
+
+		try {
+			await youtube.playlistItems.insert({
+				part: ['snippet'],
+				requestBody: {
+					snippet: {
+						playlistId,
+						resourceId: {
+							kind: 'youtube#video',
+							videoId,
+						},
 					},
 				},
-			},
-		});
-		await sleep(120);
+			});
+		} catch (error) {
+			if (isRateLimitError(error)) {
+				console.error('レートリミットを検知したため、処理を停止します。');
+				const remainingTracks = selectedItems
+					.slice(i)
+					.map((item) => item.track);
+				await saveRemainingTracks(remainingTracks);
+				throw error;
+			}
+
+			throw error;
+		}
+
+		await sleep(insertDelayMs);
 	}
 }
 
 async function main() {
 	const rl = readline.createInterface({ input, output });
+	try {
+		const tracks = await loadTracks();
+		const yt = await Innertube.create();
 
-	const tracks = await loadTracks();
-	const yt = await Innertube.create();
-
-	console.log(`loaded tracks: ${tracks.length}`);
-	const selectedVideoIds = await searchAndAskSelections(yt, rl, tracks);
-	console.log(`\n選択された動画数: ${selectedVideoIds.length}`);
-	if (selectedVideoIds.length === 0) {
-		console.log('追加対象がないため終了します。');
-		return;
-	}
-
-	const playlistUrl =
-		process.env.YouTubePlaylistURL || process.env.YOUTUBE_PLAYLIST_URL;
-	const playlistId = getPlaylistIdFromUrl(playlistUrl);
-
-	let confirm;
-	while (true) {
-		confirm = (
-			await rl.question(
-				`プレイリスト(${playlistId})へ ${selectedVideoIds.length} 件追加します。実行しますか？ (y/N): `,
-			)
-		)
-			.trim()
-			.toLowerCase();
-
-		if (confirm === 'y' || confirm === 'n' || confirm === '') {
-			break;
+		console.log(`loaded tracks: ${tracks.length}`);
+		const selectedItems = await searchAndAskSelections(yt, rl, tracks);
+		console.log(`\n選択された動画数: ${selectedItems.length}`);
+		if (selectedItems.length === 0) {
+			console.log('追加対象がないため終了します。');
+			return;
 		}
 
-		console.log('y か n を入力してください。');
+		const playlistUrl =
+			process.env.YouTubePlaylistURL || process.env.YOUTUBE_PLAYLIST_URL;
+		const playlistId = getPlaylistIdFromUrl(playlistUrl);
+
+		let confirm;
+		while (true) {
+			confirm = (
+				await rl.question(
+					`プレイリスト(${playlistId})へ ${selectedItems.length} 件追加します。実行しますか？ (y/N): `,
+				)
+			)
+				.trim()
+				.toLowerCase();
+
+			if (confirm === 'y' || confirm === 'n' || confirm === '') {
+				break;
+			}
+
+			console.log('y か n を入力してください。');
+		}
+
+		if (confirm !== 'y') {
+			console.log('キャンセルしました。');
+			return;
+		}
+
+		const authClient = await authorizeYouTube(rl);
+		await addVideosToPlaylist(authClient, playlistId, selectedItems);
+
+		console.log('完了しました。');
+	} finally {
+		rl.close();
 	}
-
-	if (confirm !== 'y') {
-		console.log('キャンセルしました。');
-		return;
-	}
-
-	const authClient = await authorizeYouTube(rl);
-	await addVideosToPlaylist(authClient, playlistId, selectedVideoIds);
-
-	console.log('完了しました。');
-	rl.close();
-	process.exit(0);
 }
 
-main().catch((err) => {
-	console.error('Error:');
-	console.error(err);
-	process.exit(1);
-});
+main()
+	.then(() => {
+		process.exit(0);
+	})
+	.catch((err) => {
+		console.error('Error:');
+		console.error(err);
+		process.exit(1);
+	});
