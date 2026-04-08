@@ -1,13 +1,20 @@
 # LINE MUSIC to YouTube Playlist
 
-LINE MUSICのプレイリストURLから曲情報を取得し、候補動画を確認しながらYouTubeプレイリストに追加するCLIツールです。
+LINE MUSICのプレイリストURLから曲情報を取得し、候補動画の先頭を自動選択してYouTubeプレイリストに追加するCLIツールです。
 
 ## できること
 
 - LINE MUSICプレイリストの曲情報を取得
-- 曲名とアーティスト名でYouTube動画候補を検索
-- 1曲ごとに追加する動画を手動で選択
-- 選択した動画を指定のYouTubeプレイリストへ追加
+- 曲名とアーティスト名でYouTube動画候補を検索し、先頭の動画URLを待機キューに追加
+- 待機キューを先頭から消しながらYouTubeプレイリストへ追加
+
+## ファイル構成
+
+```
+getMusicInfoFromLineMusic.js  // LINE MUSIC曲情報取得
+searchYoutubeURL.js           // YouTubei検索処理
+addSongToYoutubePlaylist.js   // プレイリスト操作処理
+```
 
 ## 前提条件
 
@@ -67,9 +74,9 @@ npm run get-playlist
 実行後、以下のファイルが更新されます。
 
 - `tracks/sourceData.json`: LINE MUSIC APIの生データのうち、そのプレイリストに含まれるトラックの全データ
-- `tracks/tracedData.json`: タイトル・アーティストを抽出したデータ
+- `tracks/searchResult.json`: タイトル・アーティストを抽出したデータ
 
-### 2. YouTube候補を選択してプレイリストへ追加
+### 2. YouTube候補をキュー化してプレイリストへ追加
 
 ```bash
 npm run create-playlist
@@ -77,12 +84,11 @@ npm run create-playlist
 
 実行フロー:
 
-- 各曲について候補動画が最大5件表示
-- 入力:
-  - `1`〜`5`: 該当候補を追加
-  - `s` または空入力: スキップ
-  - `q`: 中断
-- 最後に追加件数を確認し、`y`で実行
+- 各曲について候補動画を検索し、先頭の1件を `tracks/playlistAddQueue.json` に追加
+- キューを先頭から消しながらYouTubeプレイリストへ追加
+- 追加対象が100曲を超える場合は、各曲の登録後に待機を入れてYouTube APIへの負荷を下げる
+- 追加に失敗した曲（既登録、削除済み、利用不可など）は `tracks/playlistAddFailed.json` に記録
+- レートリミットを検知した場合は、その時点で処理を停止し、未処理のキューを `tracks/playlistAddQueue.json` に残す
 - 初回のみOAuth認証が走り、トークンが `.credentials/youtube-playlist-token.json` に保存
 
 ## npm scripts
@@ -99,13 +105,26 @@ npm run create-playlist
 - OAuth認証で失敗する
   - `YOUTUBE_REDIRECT_URI` が `credentials.json` の `redirect_uris` に含まれているか確認
   - `.credentials/youtube-playlist-token.json` を削除して再認証
+  - `invalid_grant` が出た場合は保存済みトークンが失効しているので、再実行時に再認証フローが走る
+
+## ファイル一覧
+
+処理中に生成される主要ファイル：
+
+- `tracks/searchResult.json`: YouTube検索済みのトラック情報（タイトル、アーティスト、URL候補）
+- `tracks/playlistAddQueue.json`: YouTubeプレイリスト追加待機中のアイテム（曲名とURL）
+- `tracks/playlistAddFailed.json`: 追加に失敗したアイテム（既登録、削除済み、利用不可など）
+- `terminal.log`: 実行ログが時間とログレベルとともに記録
 
 - プレイリストIDエラー
   - `.env` の `YouTubePlaylistURL` に `?list=...` が含まれているか確認
 
+- レートリミットで止まった
+  - プロジェクトルートの `playlistCreationQueue.json` に未処理のキューが残るので、内容を確認して再実行する
+
 ## 補足
 
-- このツールは手動選択前提のため、同一曲でも別バージョンが候補に出ることがあります。
+- このツールは自動選択前提のため、同一曲でも別バージョンが候補に出ることがあります。
 
 ## 参考サイト
 - Google OAuth2の認証ガイド的なもの：　https://zenn.dev/daddy_yukio/articles/9d5662d294eb33
