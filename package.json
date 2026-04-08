@@ -7,8 +7,9 @@
 	"type": "commonjs",
 	"main": "index.js",
 	"scripts": {
-		"create-playlist": "node createPlaylistFromJsonData.js",
-		"get-playlist": "node getMusicInfoFromLineMusic.js"
+		"get-playlist": "node getMusicInfoFromLineMusic.js",
+		"search-youtube": "node searchYoutubeURL.js",
+		"add-to-playlist": "node addSongToYoutubePlaylist.js"
 	},
 	"dependencies": {
 		"@google-cloud/local-auth": "^3.0.1",
