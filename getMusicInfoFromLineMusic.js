@@ -1,6 +1,10 @@
 const axios = require('axios');
 const fs = require('fs');
-require('dotenv').config({ quiet: true });
+const { initRuntime } = require('./lib/runtime');
+const { SOURCE_FILE, SEARCH_RESULT_FILE } = require('./lib/paths');
+
+initRuntime();
+
 const LineMusicPlaylistURL = process.env.LineMusicPlaylistURL;
 const LineMuiscPlayListID = new URL(LineMusicPlaylistURL).pathname.split(
 	'/webapp/playlist/',
@@ -20,7 +24,7 @@ async function main() {
 
 		const tracks = response.data.response.result.playlist.tracks;
 		// トラックデータをJSONファイルに保存
-		await fs.writeFileSync('tracks/sourceData.json', JSON.stringify(tracks));
+		await fs.writeFileSync(SOURCE_FILE, JSON.stringify(tracks));
 
 		const tracedData = [];
 		// トラックデータから必要な情報を抽出して新しい配列に格納
@@ -37,10 +41,7 @@ async function main() {
 			};
 			tracedData.push(tracedTrack);
 		});
-		await fs.writeFileSync(
-			'tracks/tracedData.json',
-			JSON.stringify(tracedData),
-		);
+		await fs.writeFileSync(SEARCH_RESULT_FILE, JSON.stringify(tracedData));
 
 		console.log('done!');
 	} catch (err) {

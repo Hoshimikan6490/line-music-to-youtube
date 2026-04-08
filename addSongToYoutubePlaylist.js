@@ -1,16 +1,18 @@
 const fs = require('fs/promises');
-const path = require('path');
 const readline = require('readline/promises');
 const { stdin: input, stdout: output } = require('process');
-require('dotenv').config({ quiet: true });
 const { google } = require('googleapis');
 const express = require('express');
+const { initRuntime } = require('./lib/runtime');
+const {
+	CREDENTIALS_FILE,
+	TOKEN_DIR,
+	TOKEN_PATH,
+	QUEUE_FILE,
+	FAILED_FILE,
+} = require('./lib/paths');
 
-const CREDENTIALS_FILE = path.join(__dirname, 'credentials.json');
-const TOKEN_DIR = path.join(__dirname, '.credentials');
-const TOKEN_PATH = path.join(TOKEN_DIR, 'youtube-playlist-token.json');
-const QUEUE_FILE = path.join(__dirname, 'tracks', 'playlistAddQueue.json');
-const FAILED_FILE = path.join(__dirname, 'tracks', 'playlistAddFailed.json');
+initRuntime();
 
 const YOUTUBE_SCOPE = 'https://www.googleapis.com/auth/youtube';
 const DEFAULT_INSERT_DELAY_MS = 120;

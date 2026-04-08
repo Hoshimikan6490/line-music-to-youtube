@@ -1,9 +1,10 @@
 const fs = require('fs/promises');
-const path = require('path');
 const { Innertube } = require('youtubei.js');
+const { initRuntime } = require('./lib/runtime');
+const { SEARCH_RESULT_FILE, QUEUE_FILE } = require('./lib/paths');
 
-const TRACE_FILE = path.join(__dirname, 'tracks', 'searchResult.json');
-const QUEUE_FILE = path.join(__dirname, 'tracks', 'playlistAddQueue.json');
+initRuntime();
+
 const CANDIDATE_COUNT = 5;
 const SEARCH_DELAY_MS = 250;
 
@@ -72,7 +73,7 @@ function normalizeSearchResults(searchResult) {
 }
 
 async function loadTracks() {
-	const raw = await fs.readFile(TRACE_FILE, 'utf-8');
+	const raw = await fs.readFile(SEARCH_RESULT_FILE, 'utf-8');
 	const parsed = JSON.parse(raw);
 	if (!Array.isArray(parsed)) {
 		throw new Error('tracks/searchResult.json must be an array');
