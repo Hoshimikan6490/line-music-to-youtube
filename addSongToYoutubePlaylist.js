@@ -17,16 +17,42 @@ initRuntime();
 const YOUTUBE_SCOPE = 'https://www.googleapis.com/auth/youtube';
 const DEFAULT_INSERT_DELAY_MS = 120;
 const LARGE_PLAYLIST_INSERT_DELAY_MS = 1000;
+const YOUTUBE_QUOTA_HELP_URL =
+	'https://developers.google.com/youtube/v3/getting-started#quota';
 
 function sleep(ms) {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function isRateLimitError(error) {
-	const reasons =
+function getErrorReasons(error) {
+	return (
 		error?.response?.data?.error?.errors
 			?.map((item) => String(item?.reason || '').toLowerCase())
-			.filter(Boolean) || [];
+			.filter(Boolean) || []
+	);
+}
+
+function isQuotaExceededError(error) {
+	const reasons = getErrorReasons(error);
+	const message = String(error?.message || '').toLowerCase();
+	const status = error?.response?.status;
+
+	return (
+		status === 403 &&
+		(reasons.some((reason) =>
+			[
+				'quotaexceeded',
+				'dailylimitexceeded',
+				'dailylimitexceeded402',
+				'ratelimitexceeded',
+			].includes(reason),
+		) ||
+			/quota/.test(message))
+	);
+}
+
+function isRateLimitError(error) {
+	const reasons = getErrorReasons(error);
 	const message = String(error?.message || '').toLowerCase();
 	const status = error?.response?.status;
 
@@ -278,10 +304,24 @@ async function addVideosToPlaylist(
 				throw reauthError;
 			}
 
+			if (isQuotaExceededError(error)) {
+				console.error(
+					'YouTube Data API のクォータ超過を検知したため、処理を停止します。',
+				);
+				await saveQueueFile(queueItems);
+				const quotaError = new Error('YOUTUBE_QUOTA_EXCEEDED');
+				quotaError.code = 'YOUTUBE_QUOTA_EXCEEDED';
+				quotaError.cause = error;
+				throw quotaError;
+			}
+
 			if (isRateLimitError(error)) {
 				console.error('レートリミットを検知したため、処理を停止します。');
 				await saveQueueFile(queueItems);
-				throw error;
+				const rateLimitError = new Error('YOUTUBE_RATE_LIMIT');
+				rateLimitError.code = 'YOUTUBE_RATE_LIMIT';
+				rateLimitError.cause = error;
+				throw rateLimitError;
 			}
 
 			if (is409ConflictError(error)) {
@@ -384,6 +424,27 @@ main()
 		process.exit(0);
 	})
 	.catch((err) => {
+		if (err?.code === 'YOUTUBE_QUOTA_EXCEEDED') {
+			console.error('Error: YouTube Data API の日次クォータ上限に達しました。');
+			console.error(
+				`未処理キューは ${QUEUE_FILE} に保存済みです。クォータ回復後に npm run add-to-playlist を再実行してください。`,
+			);
+			console.error(`クォータの確認方法: ${YOUTUBE_QUOTA_HELP_URL}`);
+			process.exit(1);
+			return;
+		}
+
+		if (err?.code === 'YOUTUBE_RATE_LIMIT') {
+			console.error(
+				'Error: YouTube API のレート制限により処理を中断しました。',
+			);
+			console.error(
+				`未処理キューは ${QUEUE_FILE} に保存済みです。しばらく待ってから npm run add-to-playlist を再実行してください。`,
+			);
+			process.exit(1);
+			return;
+		}
+
 		console.error('Error:');
 		console.error(err);
 		process.exit(1);
