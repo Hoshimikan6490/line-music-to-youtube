@@ -101,6 +101,7 @@ npm run add-to-playlist
 - 追加対象が100曲を超える場合は、各曲の登録後に待機を入れてYouTube APIへの負荷を下げる
 - 追加に失敗した曲（既登録、削除済み、利用不可など）は `tracks/playlistAddFailed.json` に記録
 - レートリミットを検知した場合は、その時点で処理を停止し、未処理のキューを `tracks/playlistAddQueue.json` に残す
+- YouTube Data API のクォータ上限に達した場合も、その時点で処理を停止し、未処理のキューを `tracks/playlistAddQueue.json` に残す
 - 初回のみOAuth認証が走り、トークンが `.credentials/youtube-playlist-token.json` に保存
 
 ## npm scripts
@@ -132,8 +133,9 @@ npm run add-to-playlist
 - プレイリストIDエラー
   - `.env` の `YouTubePlaylistURL` に `?list=...` が含まれているか確認
 
-- レートリミットで止まった
+- レートリミットまたはクォータ上限で止まった
   - `tracks/playlistAddQueue.json` に未処理のキューが残るので、内容を確認して `npm run add-to-playlist` を再実行する
+  - クォータ上限の場合は YouTube Data API の使用量が回復するまで待つ
 
 ## 補足
 
