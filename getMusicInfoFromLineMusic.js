@@ -1,4 +1,3 @@
-const axios = require('axios');
 const fs = require('fs');
 const { initRuntime } = require('./lib/runtime');
 const { SOURCE_FILE, SEARCH_RESULT_FILE } = require('./lib/paths');
@@ -14,15 +13,23 @@ const requestURL = `https://music.line.me/api2/playlist/${LineMuiscPlayListID}.v
 // 外部APIにリクエストを飛ばす
 async function main() {
 	try {
-		const response = await axios.get(requestURL);
+		const response = await fetch(requestURL);
+
+		if (!response.ok) {
+			throw new Error(
+				`Line Music API request failed with status ${response.status}`,
+			);
+		}
+
+		const data = await response.json();
 
 		// レスポンス内容で分岐
-		if (!response.data?.response?.result?.playlist)
+		if (!data?.response?.result?.playlist)
 			return console.error(
 				'Line MusicのAPIからプレイリスト情報が取得できませんでした。Line MusicのプレイリストURLが正しいか、公開設定が「公開」になっているかを確認してください。',
 			);
 
-		const tracks = response.data.response.result.playlist.tracks;
+		const tracks = data.response.result.playlist.tracks;
 		// トラックデータをJSONファイルに保存
 		await fs.writeFileSync(SOURCE_FILE, JSON.stringify(tracks));
 
