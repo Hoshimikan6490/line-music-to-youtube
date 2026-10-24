@@ -107,15 +107,6 @@ async function removeStoredToken() {
 
 async function saveQueueFile(queueItems) {
 	if (queueItems.length === 0) {
-		try {
-			await fs.unlink(QUEUE_FILE);
-			console.warn(`待機中の曲情報を削除しました: ${QUEUE_FILE}`);
-		} catch (error) {
-			if (error?.code !== 'ENOENT') {
-				throw error;
-			}
-		}
-
 		return;
 	}
 
@@ -129,15 +120,6 @@ async function saveQueueFile(queueItems) {
 
 async function saveFailedFile(failedItems) {
 	if (failedItems.length === 0) {
-		try {
-			await fs.unlink(FAILED_FILE);
-			console.warn(`失敗したアイテムのファイルを削除しました: ${FAILED_FILE}`);
-		} catch (error) {
-			if (error?.code !== 'ENOENT') {
-				throw error;
-			}
-		}
-
 		return;
 	}
 

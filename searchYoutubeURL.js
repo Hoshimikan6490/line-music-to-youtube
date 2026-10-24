@@ -123,15 +123,6 @@ async function searchAndAskSelections(yt, tracks) {
 
 async function saveQueueFile(queueItems) {
 	if (queueItems.length === 0) {
-		try {
-			await fs.unlink(QUEUE_FILE);
-			console.warn(`待機中の曲情報を削除しました: ${QUEUE_FILE}`);
-		} catch (error) {
-			if (error?.code !== 'ENOENT') {
-				throw error;
-			}
-		}
-
 		return;
 	}
 
